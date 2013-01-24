@@ -1,12 +1,19 @@
 """
 MXM JSON API Client
 
-v1.0a
+v1.0
+
+@category   Mxm
+@module     mxmapi
+@copyright  Copyright (c) 2007-2012 Emailcenter UK. (http://www.emailcenteruk.com)
+@license    Commercial
+
 """
 
 import urlparse
 import json
 import socket
+import ssl
 import base64
 import urllib
 import sys
@@ -46,9 +53,9 @@ class JsonClient:
             self._lastResponse = None
 
         def _postRequest(self, data):
-            port = 443 if self._scheme.lower() == 'https' else 80
-            host = 'ssl://' if self._scheme.lower() == 'https' else ''
-            host += self._host
+            useSSL = self._scheme.lower() == 'https'
+            port = 443 if useSSL else 80
+            host = self._host
 
             basicAuth = base64.b64encode(self._username + ':' + self._password)
             body = urllib.urlencode(data)
@@ -76,6 +83,8 @@ class JsonClient:
                 except socket.error as msg:
                     s = None
                     continue
+                if useSSL:
+                    s = ssl.wrap_socket(s)
                 try:
                     s.connect(sa)
                 except socket.error as msg:
