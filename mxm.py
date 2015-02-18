@@ -1,102 +1,90 @@
 """
 MXM JSON API Client
 
-v1.0
-
-@category   Mxm
-@module     mxmapi
-@copyright  Copyright (c) 2007-2012 Emailcenter UK. (http://www.emailcenteruk.com)
-@license    Commercial
-
+v2.0
 """
 
 import urlparse
 import json
 import socket
-import ssl
 import base64
 import urllib
 import sys
 import re
 
-class JsonClient:
+class Api:
 
-    def __init__(self, **config):
-        self._url = config['url'].rstrip('/') + '/api/json/'
-        self._username = config['user']
-        self._password = config['pass']
+    def __init__(self, host, username, password, useSsl = True):
+        self._host     = host
+        self._username = username
+        self._password = password
+        self._useSsl   = useSsl
         self._services = {}
 
     def _getInstance(self, service):
         if service not in self._services:
-            url = self._url + service
-            self._services[service] = self.Client(url, self._username, self._password)
+            serviceConfig = {
+                'service'  : service,
+                'host'     : self._host,
+                'username' : self._username,
+                'password' : self._password,
+                'useSsl'   : self._useSsl
+            }
+            self._services[service] = self.JsonClient(**serviceConfig)
         return  self._services[service]
 
     def __getattr__(self, name):
         return self._getInstance(name)
 
     def __repr__(self):
-        return "%s(url='%s',user='%s',pass='%s')" % (self.__class__, self._url, self._username, self._password)
+        return "%s(host='%s')" % (self.__class__, self._host)
 
-    class Client:
+    class JsonClient:
 
-        def __init__(self, url, username, password):
-            self._url = url
-            parts = urlparse.urlparse(url)
-            self._scheme = parts.scheme
-            self._host = parts.netloc
-            self._path = parts.path
+        def __init__(self, service, host, username, password, useSsl):
+            self._service  = service
+            self._host     = host
             self._username = username
             self._password = password
-            self._lastRequest = None
+            self._useSsl   = useSsl
+
+            self._lastRequest  = None
             self._lastResponse = None
 
+        def getLastRequest(self):
+            return self._lastRequest
+
+        def getLastResponse(self):
+            return self._lastResponse
+
         def _postRequest(self, data):
-            useSSL = self._scheme.lower() == 'https'
-            port = 443 if useSSL else 80
-            host = self._host
+            host = ('ssl://' if self._useSsl else '') + self._host
+            port = 443 if self._useSsl else 80
+            s = self._createSocket(host, port)
 
             basicAuth = base64.b64encode(self._username + ':' + self._password)
             body = urllib.urlencode(data)
 
             headers = {
-                'Host' : self._host,
-                'Connection' : 'close',
-                'Authorization' : "Basic %s" % (basicAuth),
-                'Content-type' : 'application/x-www-form-urlencoded',
+                'Host'           : self._host,
+                'Connection'     : 'close',
+                'Authorization'  : "Basic %s" % (basicAuth),
+                'Content-type'   : 'application/x-www-form-urlencoded',
                 'Content-length' : len(body),
-                'User-Agent' : "MxmJsonClient/1.0a Python/"
+                'User-Agent'      : "MxmJsonClient/2.0 Python/"
             }
-            request = "POST %s HTTP/1.0\r\n" % (self._path)
+            request = "POST /api/json/%s HTTP/1.0\r\n" % (self._service)
             for key in headers:
                 request += "%s: %s\r\n" % (key, headers[key])
 
             request += "\r\n%s" % (body)
             self._lastRequest = request
 
-            s = None
-            for res in socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_STREAM):
-                af, socktype, proto, canonname, sa = res
-                try:
-                    s = socket.socket(af, socktype, proto)
-                except socket.error as msg:
-                    s = None
-                    continue
-                if useSSL:
-                    s = ssl.wrap_socket(s)
-                try:
-                    s.connect(sa)
-                except socket.error as msg:
-                    s.close()
-                    s = None
-                    continue
-                break
-            if s is None:
-                raise Exception('Could not open socket')
-
             s.sendall(request)
 
+            return self._handleResponse(s)
+
+        def _handleResponse(self, s):
             response = ''
             while 1:
                 data = s.recv(1024)
@@ -122,13 +110,27 @@ class JsonClient:
 
                 raise Exception("%s (%d)" % (content, code))
 
-            return content   
+            return content
 
-        def getLastRequest(self):
-            return self._lastRequest
-
-        def getLastResponse(self):
-            return self._lastResponse
+        def _createSocket(self, host, port):
+            s = None
+            for res in socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_STREAM):
+                af, socktype, proto, canonname, sa = res
+                try:
+                    s = socket.socket(af, socktype, proto)
+                except socket.error as msg:
+                    s = None
+                    continue
+                try:
+                    s.connect(sa)
+                except socket.error as msg:
+                    s.close()
+                    s = None
+                    continue
+                break
+            if s is None:
+                raise Exception('Could not open socket')
+            return s
 
         def _decodeJson(self, string):
             try:
@@ -153,4 +155,4 @@ class JsonClient:
             return function
 
         def __repr__(self):
-            return "%s('%s','%s','%s')" % (self.__class__, self._url, self._username, self._password)
+            return "%s(service='%s',host='%s')" % (self.__class__, self._service, self._host)

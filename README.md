@@ -7,15 +7,15 @@ Usage Example
 -------------
 ```python
 # Instantiate Client:
-import mxmapi
+import mxm
 config = {
-    'url':'https://maxemail.emailcenteruk.com/',
-    'user':'api@user.com',
-    'pass':'apipass'
+    'host'     :'maxemail.emailcenteruk.com',
+    'username' :'api@user.com',
+    'password' :'apipass'
 }
-client = mxmapi.JsonClient(**config)
- 
- 
+client = mxm.Api(**config)
+
+
 # General:
 result = client.serviceName.method(arg1, arg2)
 print result
